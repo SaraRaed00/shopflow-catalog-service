@@ -1,0 +1,7 @@
+package com.shopflow.catalog.repository;
+
+import com.shopflow.catalog.domain.model.Reservation;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ReservationRepository extends JpaRepository<Reservation, Long> {
+}
