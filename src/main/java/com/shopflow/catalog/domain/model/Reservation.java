@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
+import com.shopflow.catalog.domain.exception.ConflictException;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
 
@@ -11,6 +13,7 @@ import java.time.Instant;
 @Table(name = "reservation")
 @Getter
 @Setter
+@EntityListeners(AuditingEntityListener.class)
 public class Reservation {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
 
@@ -20,7 +23,7 @@ public class Reservation {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false ) @JoinColumn(name = "warehouse_id", nullable = false) private Warehouse warehouse;
 
-    @Column()private Integer quantity;
+    @Column(nullable = false)private Integer quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -44,5 +47,12 @@ public class Reservation {
     @Override
     public int hashCode() {
         return getClass().hashCode();
+    }
+
+    public void changeStatus(ReservationStatus target){
+        if(!status.canTransitionTo(target)){
+            throw new ConflictException("ILLEGAL_STATUS_TRANSITION", "CANNOT MOVE FROM: "+ status + " TO: " + target );
+        }
+        this.status = target;
     }
 }

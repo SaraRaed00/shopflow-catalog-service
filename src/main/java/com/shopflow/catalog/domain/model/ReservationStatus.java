@@ -4,7 +4,15 @@ public enum ReservationStatus {
     PENDING,
     CONFIRMED,
     RELEASED,
-    EXPIRED
-}
+    EXPIRED;
 
+    public boolean canTransitionTo(ReservationStatus target){
+        return switch(this){
+            case PENDING -> (target == CONFIRMED) ||
+                target == RELEASED ||
+                target == EXPIRED;
+            case CONFIRMED, RELEASED, EXPIRED -> false;
+        };
+    }
+}
 

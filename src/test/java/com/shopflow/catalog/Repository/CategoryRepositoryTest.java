@@ -1,17 +1,20 @@
 package com.shopflow.catalog.Repository;
 
+import com.shopflow.catalog.config.JpaConfig;
 import com.shopflow.catalog.domain.model.Category;
 import com.shopflow.catalog.repository.CategoryRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(JpaConfig.class)
 public class CategoryRepositoryTest {
 
     @Autowired

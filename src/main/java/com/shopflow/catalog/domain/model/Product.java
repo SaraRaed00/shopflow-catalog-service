@@ -6,7 +6,7 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
+import com.shopflow.catalog.domain.exception.ConflictException;
 import java.time.Instant;
 
 @Entity
@@ -63,5 +63,12 @@ public class Product {
     @Override
     public int hashCode() {
         return getClass().hashCode();
+    }
+
+    public void changeStatus(ProductStatus target){
+        if(!status.canTransitionTo(target)){
+            throw new ConflictException("ILLEGAL_STATUS_TRANSITION", "CANNOT MOVE FROM: "+ status + " TO: " + target );
+        }
+        this.status = target;
     }
 }

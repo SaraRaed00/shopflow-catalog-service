@@ -13,8 +13,8 @@ CREATE TABLE product
 (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
     category_id BIGINT,
-    sku         VARCHAR(100) NOT NULL,
-    name           VARCHAR(100) NOT NULL,
+    sku         VARCHAR(64) NOT NULL,
+    name           VARCHAR(200) NOT NULL,
     description    TEXT,
     price_amount   DECIMAL(12,3) NOT NULL,
     price_currency CHAR(3) NOT NULL,

@@ -1,0 +1,109 @@
+package com.shopflow.catalog.service;
+
+import com.shopflow.catalog.domain.exception.ConflictException;
+import com.shopflow.catalog.domain.exception.NotFoundException;
+import com.shopflow.catalog.domain.model.*;
+import com.shopflow.catalog.mapper.ReservationMapper;
+import com.shopflow.catalog.repository.ReservationRepository;
+import com.shopflow.catalog.repository.StockItemRepository;
+import com.shopflow.catalog.web.dto.CreateReservationRequest;
+import com.shopflow.catalog.web.dto.ReservationResponse;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class ReservationServiceTest {
+
+    @Mock
+    private ReservationRepository reservationRepository;
+    @Mock
+    private StockItemRepository stockItemRepository;
+    @Mock
+    private ReservationMapper reservationMapper;
+
+    @InjectMocks
+    private ReservationService reservationService;
+
+    private StockItem stockItem(int quantity, int reserved) {
+        StockItem item = new StockItem();
+        item.setQuantity(quantity);
+        item.setReservedQty(reserved);
+        item.setProduct(new Product());
+        item.setWarehouse(new Warehouse());
+        return item;
+    }
+
+    @Test
+    void create_shouldThrowConflict_whenInsufficientStock() {
+        StockItem item = stockItem(10, 8); // only 2 available
+        CreateReservationRequest request = new CreateReservationRequest(1L, 1L, 5);
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 1L)).thenReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> reservationService.create(request))
+            .isInstanceOf(ConflictException.class)
+            .hasMessageContaining("Available stock");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    void create_shouldIncrementReservedQty_whenStockAvailable() {
+        StockItem item = stockItem(10, 0);
+        CreateReservationRequest request = new CreateReservationRequest(1L, 1L, 5);
+        Reservation saved = new Reservation();
+        ReservationResponse mapped = new ReservationResponse(1L, "ref-1", 1L, "PENDING", 1L, 5, null, null);
+
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 1L)).thenReturn(Optional.of(item));
+        when(reservationRepository.save(any(Reservation.class))).thenReturn(saved);
+        when(reservationMapper.toResponse(saved)).thenReturn(mapped);
+
+        ReservationResponse result = reservationService.create(request);
+
+        assertThat(item.getReservedQty()).isEqualTo(5);
+        assertThat(result.status()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void confirm_shouldBeIdempotent_whenAlreadyConfirmed() {
+        Reservation reservation = new Reservation();
+        reservation.setStatus(ReservationStatus.CONFIRMED);
+        ReservationResponse mapped = new ReservationResponse(1L, "ref-1", 1L, "CONFIRMED", 1L, 5 , null, null);
+
+        when(reservationRepository.findByReference("ref-1")).thenReturn(Optional.of(reservation));
+        when(reservationMapper.toResponse(reservation)).thenReturn(mapped);
+
+        ReservationResponse result = reservationService.confirm("ref-1");
+
+        assertThat(result.status()).isEqualTo("CONFIRMED");
+        // proves it did NOT try to touch stock a second time
+        verifyNoInteractions(stockItemRepository);
+    }
+
+    @Test
+    void release_shouldThrowConflict_whenAlreadyConfirmed() {
+        Reservation reservation = new Reservation();
+        reservation.setStatus(ReservationStatus.CONFIRMED);
+        when(reservationRepository.findByReference("ref-1")).thenReturn(Optional.of(reservation));
+
+        assertThatThrownBy(() -> reservationService.release("ref-1"))
+            .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void findByReference_shouldThrowNotFound_whenMissing() {
+        when(reservationRepository.findByReference("bad-ref")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.findByReference("bad-ref"))
+            .isInstanceOf(NotFoundException.class);
+    }
+}
