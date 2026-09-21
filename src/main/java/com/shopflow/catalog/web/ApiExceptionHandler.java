@@ -1,6 +1,7 @@
 package com.shopflow.catalog.web;
 
 import com.shopflow.catalog.domain.exception.ConflictException;
+import com.shopflow.catalog.domain.exception.InvalidRequestException;
 import com.shopflow.catalog.domain.exception.NotFoundException;
 import com.shopflow.catalog.web.dto.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,16 +21,13 @@ import java.util.List;
 import java.util.UUID;
 
 // @RestControllerAdvice means: watch every controller in the whole app.
-// If any of them lets an exception escape (instead of catching it), send it here first,
 // This is the ONE place in the entire app that decides how errors look to the client.
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    // Triggered whenever ANY controller method (via its service) throws NotFoundException
-    // ProductService.findEntityById() when the id doesn't exist.
-    // @ExceptionHandler(NotFoundException.class) tells Spring "run THIS method when that specific exception type is thrown, anywhere downstream of a controller."
+    // triggered whenever ANY controller method (via its service) throws NotFoundException
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(NotFoundException ex, HttpServletRequest req) {
         // ex = the actual exception object that was thrown, so we can read its code/message
@@ -38,7 +36,6 @@ public class ApiExceptionHandler {
         // 404 - matches your guide's status table: "The addressed resource does not exist"
     }
 
-    // ConflictException - duplicate SKU, illegal status transition,insufficient stock. Anywhere in the app that does `throw new ConflictException(...)`
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(ConflictException ex, HttpServletRequest req) {
         return build(HttpStatus.CONFLICT, ex.getCode(), ex.getMessage(), req, null);
@@ -59,8 +56,8 @@ public class ApiExceptionHandler {
         // matches "A validation failure returns 400 with one entry per invalid field."
     }
 
-    // Also automatic, not thrown by us directly: this fires when the DATABASE itself rejects something - e.g. a unique constraint violation that slipped past our
     @ExceptionHandler(DataIntegrityViolationException.class)
+    // for violating constraints,...
     public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest req) {
         return build(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION", "The request conflicts with existing data", req, null);
         // 409 - same status family as ConflictException, since it's the same KIND of
@@ -77,6 +74,10 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("Unhandled exception on {} {}", req.getMethod(), req.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An unexpected error occurred", req, null);
+    }
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ApiError> handleInvalidRequest(InvalidRequestException ex, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, ex.getCode(), ex.getMessage(), req, null);
     }
 
     // Every handler above calls this to actually construct the response.

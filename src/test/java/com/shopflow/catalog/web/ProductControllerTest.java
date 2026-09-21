@@ -1,18 +1,18 @@
 package com.shopflow.catalog.web;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopflow.catalog.domain.exception.ConflictException;
 import com.shopflow.catalog.service.InventoryService;
 import com.shopflow.catalog.service.ProductService;
 import com.shopflow.catalog.web.dto.CreateProductRequest;
+import com.shopflow.catalog.web.dto.PageResponse;
 import com.shopflow.catalog.web.dto.ProductResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -49,7 +49,7 @@ class ProductControllerTest {
 
         when(productService.create(any())).thenReturn(response);
 
-        mockMvc.perform(post("/api/v1/products")
+        mockMvc.perform(post("/api/v1/products/create")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())
@@ -61,7 +61,7 @@ class ProductControllerTest {
         CreateProductRequest request = new CreateProductRequest(
             "", "Test Product", "desc", 1L, new BigDecimal("5.000"), "KWD");
 
-        mockMvc.perform(post("/api/v1/products")
+        mockMvc.perform(post("/api/v1/products/create")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest())
@@ -77,7 +77,7 @@ class ProductControllerTest {
         when(productService.create(any()))
             .thenThrow(new ConflictException("DUPLICATE_SKU", "SKU already exists"));
 
-        mockMvc.perform(post("/api/v1/products")
+        mockMvc.perform(post("/api/v1/products/create")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isConflict())
@@ -95,5 +95,33 @@ class ProductControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(5))
             .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+    @Test
+    void search_shouldApplyMultipleFilters_whenCombined() throws Exception {
+        PageResponse<ProductResponse> emptyPage = new PageResponse<>(List.of(), 0, 20, 0, 0, true, true);
+        when(productService.search(any(), any())).thenReturn(emptyPage);
+
+        // combination 1: text + status
+        mockMvc.perform(post("/api/v1/products/search?q=widget&status=ACTIVE"))
+            .andExpect(status().isOk());
+
+        // combination 2: category + price range
+        mockMvc.perform(post("/api/v1/products/search?categoryId=1&minPrice=5&maxPrice=50"))
+            .andExpect(status().isOk());
+
+        // combination 3: status only
+        mockMvc.perform(post("/api/v1/products/search?status=DRAFT"))
+            .andExpect(status().isOk());
+
+        // combination 4: no filters at all
+        mockMvc.perform(post("/api/v1/products/search"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void search_shouldReturn400_whenSortFieldInvalid() throws Exception {
+        mockMvc.perform(post("/api/v1/products/search?sort=badField"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_SORT_FIELD"));
     }
 }

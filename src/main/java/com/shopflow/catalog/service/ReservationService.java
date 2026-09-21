@@ -14,8 +14,10 @@ import com.shopflow.catalog.web.dto.ReservationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Service
@@ -24,11 +26,13 @@ public class ReservationService {
     private final StockItemRepository stockItemRepository;
     private final ReservationMapper reservationMapper;
     private static final Duration HOLD_DURATION = Duration.ofMinutes(15);
+    private final Clock clock;
 
-    public ReservationService(ReservationRepository reservationRepository, StockItemRepository stockItemRepository, ReservationMapper reservationMapper){
+    public ReservationService(ReservationRepository reservationRepository, StockItemRepository stockItemRepository, ReservationMapper reservationMapper, Clock clock){
         this.reservationRepository = reservationRepository;
         this.stockItemRepository = stockItemRepository;
         this.reservationMapper = reservationMapper;
+        this.clock = clock;
     }
 
     @Transactional
@@ -50,7 +54,9 @@ public class ReservationService {
         reservation.setProduct(stock.getProduct());
         reservation.setReference(UUID.randomUUID().toString());
         reservation.setQuantity(request.quantity());
-        reservation.setExpiresAt(Instant.now().plus(HOLD_DURATION));
+        //
+        //reservation.setExpiresAt(Instant.now().plus(HOLD_DURATION));
+        reservation.setExpiresAt(Instant.now(clock).plus(HOLD_DURATION));
 
         return reservationMapper.toResponse(reservationRepository.save(reservation));
 

@@ -10,10 +10,15 @@ import com.shopflow.catalog.web.dto.CreateReservationRequest;
 import com.shopflow.catalog.web.dto.ReservationResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,8 @@ class ReservationServiceTest {
     private StockItemRepository stockItemRepository;
     @Mock
     private ReservationMapper reservationMapper;
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -41,6 +48,28 @@ class ReservationServiceTest {
         item.setProduct(new Product());
         item.setWarehouse(new Warehouse());
         return item;
+    }
+
+    @Test
+    void expireAt_should_be_15min_after_createdAt() {
+        Instant now = Instant.parse("2026-09-21T10:00:00Z");
+        when(clock.instant()).thenReturn(now);
+
+        StockItem item = stockItem(10, 0);
+        CreateReservationRequest request = new CreateReservationRequest(2L, 1L, 5);
+        Reservation savedStub = new Reservation();
+        Instant expectedExpiry = now.plus(Duration.ofMinutes(15));
+        ReservationResponse response = new ReservationResponse(1L, "ref-1", 2L, "PENDING", 1L, 5, expectedExpiry, now);
+
+        when(stockItemRepository.findByProductIdAndWarehouseId(2L, 1L)).thenReturn(Optional.of(item));
+        when(reservationRepository.save(any(Reservation.class))).thenReturn(savedStub);
+        when(reservationMapper.toResponse(savedStub)).thenReturn(response);
+
+        reservationService.create(request);
+
+        ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+        verify(reservationRepository).save(captor.capture());
+        assertThat(captor.getValue().getExpiresAt()).isEqualTo(expectedExpiry);
     }
 
     @Test
@@ -58,6 +87,8 @@ class ReservationServiceTest {
 
     @Test
     void create_shouldIncrementReservedQty_whenStockAvailable() {
+        when(clock.instant()).thenReturn(Instant.now());
+        //when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         StockItem item = stockItem(10, 0);
         CreateReservationRequest request = new CreateReservationRequest(1L, 1L, 5);
         Reservation saved = new Reservation();
