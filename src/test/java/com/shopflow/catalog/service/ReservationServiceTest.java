@@ -137,4 +137,43 @@ class ReservationServiceTest {
         assertThatThrownBy(() -> reservationService.findByReference("bad-ref"))
             .isInstanceOf(NotFoundException.class);
     }
+    @Test
+    void confirm_shouldThrowNotFound_whenStockRecordMissing() {
+        Reservation reservation = new Reservation();
+        reservation.setStatus(ReservationStatus.PENDING);
+        reservation.setProduct(new Product());
+        reservation.setWarehouse(new Warehouse());
+        reservation.setQuantity(5);
+
+        when(reservationRepository.findByReference("ref-1")).thenReturn(Optional.of(reservation));
+        when(stockItemRepository.findByProductIdAndWarehouseId(any(), any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.confirm("ref-1"))
+            .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void release_shouldThrowNotFound_whenReservationMissing() {
+        when(reservationRepository.findByReference("bad-ref")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.release("bad-ref"))
+            .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void release_shouldDecrementReservedQty_whenValid() {
+        StockItem item = stockItem(10, 5);
+        Reservation reservation = new Reservation();
+        reservation.setStatus(ReservationStatus.PENDING);
+        reservation.setProduct(item.getProduct());
+        reservation.setWarehouse(item.getWarehouse());
+        reservation.setQuantity(5);
+
+        when(reservationRepository.findByReference("ref-1")).thenReturn(Optional.of(reservation));
+        when(stockItemRepository.findByProductIdAndWarehouseId(any(), any())).thenReturn(Optional.of(item));
+
+        reservationService.release("ref-1");
+
+        assertThat(item.getReservedQty()).isEqualTo(0);
+    }
 }

@@ -9,6 +9,8 @@ import com.shopflow.catalog.repository.ProductRepository;
 import com.shopflow.catalog.web.dto.CategoryResponse;
 import com.shopflow.catalog.web.dto.CreateCategoryRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ public class CategoryService {
     private final CategoryMapper categoryMapper;
 
     @Transactional
+    @CacheEvict(value = "CategoryTree" , allEntries = true)
     public CategoryResponse create(CreateCategoryRequest request){
         Category category = new Category();
         category.setName(request.name());
@@ -44,7 +47,6 @@ public class CategoryService {
         return new CategoryResponse(finalResponse.id(), finalResponse.name(), finalResponse.slug(), finalResponse.parentId(), actualChildren, finalResponse.createdAt(), finalResponse.updatedAt());
     }
 
-
     @Transactional(readOnly = true)
     public CategoryResponse findById(Long id) {
         Category category = categoryRepository.findById(id)
@@ -52,12 +54,14 @@ public class CategoryService {
         return categoryWithChildren(category);
     }
 
+    @Cacheable(value = "CategoryTree")
     @Transactional(readOnly = true)
     public List<CategoryResponse> findAll() {
         return categoryRepository.findAll().stream().map(categoryMapper::toResponse).toList();
     }
 
     @Transactional
+    @CacheEvict(value = "CategoryTree", allEntries = true)
     public void delete(Long id) {
         Category category = categoryRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "No category with id " + id));
@@ -70,6 +74,7 @@ public class CategoryService {
         categoryRepository.delete(category);
     }
     @Transactional
+    @CacheEvict(value = "CategoryTree", allEntries = true)
     public CategoryResponse update(Long id, CreateCategoryRequest request) {
         Category category = categoryRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "No category with id " + id));

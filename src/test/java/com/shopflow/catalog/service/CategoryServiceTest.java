@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -108,5 +109,53 @@ class CategoryServiceTest {
 
         assertThatThrownBy(() -> categoryService.findById(42L))
             .isInstanceOf(NotFoundException.class);
+    }
+    //
+    @Test
+    void findAll_shouldReturnAllCategories() {
+        Category category = new Category();
+
+        CategoryResponse response = new CategoryResponse(1L, "Electronics", "electronics", null,  Collections.emptyList(), null, null);
+
+        when(categoryRepository.findAll()).thenReturn(List.of(category));
+        when(categoryMapper.toResponse(category)).thenReturn(response);
+
+        List<CategoryResponse> result = categoryService.findAll();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).slug()).isEqualTo("electronics");
+    }
+
+    @Test
+    void update_shouldModifyCategory_whenNoParent() {
+        Category category = new Category();
+        CreateCategoryRequest request = new CreateCategoryRequest("new-slug", "New Name", null);
+        CategoryResponse response =new CategoryResponse(1L, "New Name", "new-slug", null, Collections.emptyList(), null, null);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByParentId(any())).thenReturn(Collections.emptyList());
+        when(categoryMapper.toResponse(category)).thenReturn(response);
+
+        CategoryResponse result = categoryService.update(1L, request);
+
+        assertThat(result.name()).isEqualTo("New Name");
+        assertThat(category.getName()).isEqualTo("New Name");
+    }
+
+    @Test
+    void update_shouldSetNewParent_whenParentIdProvided() {
+        Category category = new Category(); // 1L
+        Category newParent = new Category(); //5L
+        CreateCategoryRequest request = new CreateCategoryRequest("slug", "Name", 5L);
+        CategoryResponse response = new CategoryResponse(1L, "Name", "slug", 5L, Collections.emptyList(), null, null);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(categoryRepository.findById(5L)).thenReturn(Optional.of(newParent));
+        when(categoryRepository.findByParentId(any())).thenReturn(Collections.emptyList());
+        when(categoryMapper.toResponse(category)).thenReturn(response);
+
+        categoryService.update(1L, request);
+
+        assertThat(category.getParent()).isEqualTo(newParent);
     }
 }

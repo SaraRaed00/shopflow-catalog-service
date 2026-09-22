@@ -7,6 +7,7 @@ import com.shopflow.catalog.repository.ProductRepository;
 import com.shopflow.catalog.repository.StockItemRepository;
 import com.shopflow.catalog.repository.WarehouseRepository;
 import com.shopflow.catalog.web.dto.AdjustStockRequest;
+import com.shopflow.catalog.web.dto.StockResponse;
 import com.shopflow.catalog.web.dto.TransferStockRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,10 +15,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -82,4 +86,49 @@ class InventoryServiceTest {
         assertThatThrownBy(() -> inventoryService.transfer(request))
             .isInstanceOf(NotFoundException.class);
     }
+
+    @Test
+    void getStockForProduct_shouldReturnAvailableCalculatedCorrectly() {
+        StockItem item = stockItem(50, 12);
+        item.setWarehouse(new Warehouse());
+        when(stockItemRepository.findByProductId(1L)).thenReturn(List.of(item));
+
+        List<StockResponse> result = inventoryService.getStockForProduct(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).available()).isEqualTo(38);
+    }
+    @Test
+    void transfer_shouldCreateDestinationStockItem_whenNoneExistsYet() {
+        StockItem from = stockItem(20, 0);
+        Product product = new Product();
+        Warehouse toWarehouse = new Warehouse();
+        TransferStockRequest request = new TransferStockRequest(1L, 1L, 2L, 5);
+
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 1L)).thenReturn(Optional.of(from));
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 2L)).thenReturn(Optional.empty());
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(warehouseRepository.findById(2L)).thenReturn(Optional.of(toWarehouse));
+        when(stockItemRepository.save(any(StockItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        inventoryService.transfer(request);
+
+        assertThat(from.getQuantity()).isEqualTo(15);
+    }
+    @Test
+    void adjust_shouldCreateNewStockItem_whenNoneExistsYet() {
+        Product product = new Product();
+        Warehouse warehouse = new Warehouse();
+        AdjustStockRequest request = new AdjustStockRequest(1L, 1L, 20, "initial stock");
+
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 1L)).thenReturn(Optional.empty());
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(warehouseRepository.findById(1L)).thenReturn(Optional.of(warehouse));
+        when(stockItemRepository.save(any(StockItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        inventoryService.adjust(request);
+
+        verify(stockItemRepository).save(any(StockItem.class));
+    }
+
 }

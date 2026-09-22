@@ -11,6 +11,9 @@ import com.shopflow.catalog.repository.CategoryRepository;
 import com.shopflow.catalog.repository.ProductRepository;
 import com.shopflow.catalog.repository.ProductSpecification;
 import com.shopflow.catalog.web.dto.*;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -50,12 +53,13 @@ public class ProductService {
 
         return productMapper.toResponse(productRepository.save(product));
     }
-
+    @Cacheable(value = "products", key = "#id")
     @Transactional(readOnly = true)
     public ProductResponse findById(Long id) {
         return productMapper.toResponse(findEntityById(id));
     }
 
+    @Cacheable(value = "productBySku", key = "#sku")
     @Transactional(readOnly = true)
     public ProductResponse findBySku(String sku) {
           return productMapper.toResponse(findEntityBySku(sku));
@@ -71,6 +75,10 @@ public class ProductService {
     }
 
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "products", key = "#id"),
+        @CacheEvict(value = "productBySku", allEntries = true)
+    })
     public ProductResponse update(Long id, UpdateProductRequest request) {
         Product product = findEntityById(id);
         Category category = categoryRepository.findById(request.categoryId())
@@ -83,6 +91,7 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(value = "products", key = "#id")
     public ProductResponse changeStatus(Long id, ProductStatus target) {
         Product product = findEntityById(id);
         product.changeStatus(target);
@@ -90,12 +99,11 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(value = "products", key = "#id")
     public void discontinue(Long id) {
 
         changeStatus(id, ProductStatus.DISCONTINUED);
     }
-
-
 
 
     private Product findEntityById(Long id) {
