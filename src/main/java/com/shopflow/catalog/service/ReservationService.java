@@ -8,11 +8,13 @@ import com.shopflow.catalog.domain.model.StockItem;
 import com.shopflow.catalog.mapper.ReservationMapper;
 import com.shopflow.catalog.repository.ReservationRepository;
 import com.shopflow.catalog.repository.StockItemRepository;
-import com.shopflow.catalog.web.dto.CreateCategoryRequest;
 import com.shopflow.catalog.web.dto.CreateReservationRequest;
 import com.shopflow.catalog.web.dto.ReservationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -34,7 +36,11 @@ public class ReservationService {
         this.reservationMapper = reservationMapper;
         this.clock = clock;
     }
-
+    @Retryable(
+        retryFor = OptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 25, multiplier = 2)
+    )
     @Transactional
     public ReservationResponse create(CreateReservationRequest request){
         // check that the stock has a pair(product id, warehouse id) available
@@ -54,15 +60,11 @@ public class ReservationService {
         reservation.setProduct(stock.getProduct());
         reservation.setReference(UUID.randomUUID().toString());
         reservation.setQuantity(request.quantity());
-        //
         //reservation.setExpiresAt(Instant.now().plus(HOLD_DURATION));
         reservation.setExpiresAt(Instant.now(clock).plus(HOLD_DURATION));
 
         return reservationMapper.toResponse(reservationRepository.save(reservation));
-
     }
-
-
     @Transactional(readOnly = true)
     public ReservationResponse findByReference(String reference) {
         return reservationMapper.toResponse(findEntityByReference(reference));

@@ -1,16 +1,19 @@
 package com.shopflow.catalog.service;
 
 import com.shopflow.catalog.domain.exception.ConflictException;
-import com.shopflow.catalog.domain.model.Category;
-import com.shopflow.catalog.repository.CategoryRepository;
+import com.shopflow.catalog.domain.model.*;
+import com.shopflow.catalog.repository.*;
 import com.shopflow.catalog.support.AbstractIntegrationTest;
-import com.shopflow.catalog.web.dto.CreateProductRequest;
-import com.shopflow.catalog.web.dto.ProductResponse;
-import com.shopflow.catalog.web.dto.UpdateProductRequest;
+import com.shopflow.catalog.web.dto.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,6 +22,11 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private ProductService productService;
     @Autowired private CategoryRepository categoryRepository;
+    @Autowired private ProductRepository productRepository;
+    @Autowired private WarehouseRepository warehouseRepository;
+    @Autowired private StockItemRepository stockItemRepository;
+    @Autowired private ReservationService reservationService;
+
 
     // create operation sends correct data
     public void create_sends_correct_data(){
@@ -72,4 +80,149 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         ProductResponse afterUpdate = productService.findById(created.id()); // trigger cach
         assertThat(afterUpdate.name()).isEqualTo("Updated Name");
     }
-}
+    @Test
+    void reservation_concurrency_test() throws InterruptedException{
+        // category, product, warehouse, stockitem
+        Category category = new Category();
+        category.setName("CategoryTest");
+        category.setSlug("test-concurrency"+ java.util.UUID.randomUUID());
+        Category savedCategory = categoryRepository.save(category);
+
+        Product product = new Product();
+        product.setName("Product-test");
+        product.setSku("TEST0005");
+        product.setCategory(savedCategory);
+        product.setPrice(new Money(new BigDecimal("3.9"), "KWD"));
+        Product savedProduct = productRepository.save(product);
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setName("WH-TEST");
+        warehouse.setCode("xxx");
+        warehouse.setCountry("KW");
+        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+
+        StockItem stockItem = new StockItem();
+        stockItem.setWarehouse(savedWarehouse);
+        stockItem.setProduct(savedProduct);
+        stockItem.setQuantity(5);
+        stockItem.setReservedQty(0);
+        StockItem savedStockItem = stockItemRepository.save(stockItem);
+
+        int ThreadCount = 20;
+        ExecutorService pool = Executors.newFixedThreadPool(ThreadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger conflictCount = new AtomicInteger(0);
+
+        for(int i=0; i<20 ;i++){
+            pool.submit(()-> {
+                try {
+                    startLatch.await();
+                    CreateReservationRequest request = new CreateReservationRequest(stockItem.getProduct().getId(), stockItem.getWarehouse().getId(), 1);
+                    ReservationResponse response = reservationService.create(request);
+                    successCount.incrementAndGet();
+                }
+                catch (ConflictException exception){
+                    conflictCount.incrementAndGet();
+                }
+                catch (InterruptedException exception){
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        startLatch.countDown();
+
+        pool.shutdown(); // stop accepting extra tasks
+        boolean finished = pool.awaitTermination(10, TimeUnit.SECONDS); // stop the main thread suntill all 20 finish, but continue after 10s if a thread stucks
+
+        assertThat(successCount.get()).isEqualTo(5);
+        assertThat(conflictCount.get()).isEqualTo(15);
+
+        StockItem finalStock = stockItemRepository.findById(savedStockItem.getId()).orElseThrow();
+        assertThat(finalStock.getReservedQty()).isEqualTo(5);
+
+    }
+
+    @Test // check that confirming reservation many times dont deduct extra quantity
+    void confirm_isIdempotent(){
+        Category category = new Category();
+        category.setName("C-TEST");
+        category.setSlug("test-idempotent");
+        Category savedCategory = categoryRepository.save(category);
+
+        Product product = new Product();
+        product.setPrice(new Money(new BigDecimal(6.5),"KWD"));
+        product.setName("P-TEST");
+        product.setSku("TESTIDEMPOTENT");
+        product.setCategory(savedCategory);
+        Product savedProduct = productRepository.save(product);
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setCountry("KW");
+        warehouse.setName("TEST-WAREHOUSE-");
+        warehouse.setCode("xxxxxx");
+        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+
+        StockItem stockItem = new StockItem();
+        stockItem.setProduct(savedProduct);
+        stockItem.setWarehouse(savedWarehouse);
+        stockItem.setReservedQty(0);
+        stockItem.setQuantity(6);
+        StockItem saveStockItem = stockItemRepository.save(stockItem);
+
+        CreateReservationRequest request = new CreateReservationRequest(savedProduct.getId(),savedWarehouse.getId(),2);
+        ReservationResponse response = reservationService.create(request);
+
+        reservationService.confirm(response.reference());
+        reservationService.confirm(response.reference()); // call again
+
+        StockItem checkStock = stockItemRepository.findById(saveStockItem.getId()).orElseThrow();
+
+        assertThat(checkStock.getReservedQty()).isEqualTo(0);
+        assertThat(checkStock.getQuantity()).isEqualTo(4);
+
+    }
+
+    @Test
+    void release_isIdempotent(){
+            Category category = new Category();
+            category.setName("Release Idempotency Test");
+            category.setSlug("release-idemp");
+            Category savedCategory = categoryRepository.save(category);
+
+            Product product = new Product();
+            product.setSku("RELEASE-IDEMPOTENT");
+            product.setName("Release Idempotency Product");
+            product.setCategory(savedCategory);
+            product.setPrice(new Money(new BigDecimal("5.000"), "KWD"));
+            Product savedProduct = productRepository.save(product);
+
+            Warehouse warehouse = new Warehouse();
+            warehouse.setCode("REL-IDEMP");
+            warehouse.setName("Release Idempotency Warehouse");
+            warehouse.setCountry("KW");
+            Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+
+            StockItem stockItem = new StockItem();
+            stockItem.setProduct(savedProduct);
+            stockItem.setWarehouse(savedWarehouse);
+            stockItem.setQuantity(10);
+            stockItem.setReservedQty(0);
+            stockItemRepository.save(stockItem);
+
+            CreateReservationRequest request = new CreateReservationRequest(
+                savedProduct.getId(), savedWarehouse.getId(), 4);
+            ReservationResponse reservation = reservationService.create(request);
+
+            reservationService.release(reservation.reference());
+            reservationService.release(reservation.reference()); // called twice, deliberately
+
+            StockItem finalStock = stockItemRepository.findById(stockItem.getId()).orElseThrow();
+            assertThat(finalStock.getQuantity()).isEqualTo(10);
+            assertThat(finalStock.getReservedQty()).isEqualTo(0);
+        }
+    }
+
+
+
+

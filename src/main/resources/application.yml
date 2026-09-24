@@ -13,10 +13,24 @@ spring:
         properties:
             hibernate:
                 format_sql: true
-
+cache:
+    ttl:
+        default-minutes: 10
+        category-tree-hours: 6
 logging:
     level:
         org.hibernate.SQL: debug
-
 server:
     port: 8080
+
+management:
+    endpoints:
+        web:
+            exposure:
+                include: health, info, metrics, prometheus
+    endpoint:
+        health:
+            show-details: when_authorized
+    metrics:
+        tags:
+            application: catalog-service

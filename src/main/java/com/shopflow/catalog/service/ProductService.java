@@ -77,7 +77,7 @@ public class ProductService {
     @Transactional
     @Caching(evict = {
         @CacheEvict(value = "products", key = "#id"),
-        @CacheEvict(value = "productBySku", allEntries = true)
+        @CacheEvict(value = "productBySku", key = "#result.sku()")
     })
     public ProductResponse update(Long id, UpdateProductRequest request) {
         Product product = findEntityById(id);
@@ -88,7 +88,7 @@ public class ProductService {
         product.setCategory(category);
         product.setPrice(new Money(request.priceAmount(), request.priceCurrency()));
         return productMapper.toResponse(product);
-    }
+    }// try not to delete all sku cache
 
     @Transactional
     @CacheEvict(value = "products", key = "#id")

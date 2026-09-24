@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
@@ -26,7 +27,7 @@ import java.time.Duration;
 public class CacheConfig implements CachingConfigurer {
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory , @Value("${cache.ttl.default-minutes}") Long defaultMin, @Value("${cache.ttl.category-tree-hours}")Long categoryTreeHours) {
         ObjectMapper redisObjectMapper = new ObjectMapper();
         redisObjectMapper.registerModule(new JavaTimeModule());
         redisObjectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
@@ -41,11 +42,11 @@ public class CacheConfig implements CachingConfigurer {
             .disableCachingNullValues() //
             .serializeValuesWith(RedisSerializationContext.SerializationPair
                 .fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper)))
-            .entryTtl(Duration.ofMinutes(10));
+            .entryTtl(Duration.ofMinutes(defaultMin));
 
         return RedisCacheManager.builder(connectionFactory)
             .cacheDefaults(base)
-            .withCacheConfiguration("categoryTree", base.entryTtl(Duration.ofHours(6)))
+            .withCacheConfiguration("categoryTree", base.entryTtl(Duration.ofHours(categoryTreeHours)))
             .build();
     }
 
