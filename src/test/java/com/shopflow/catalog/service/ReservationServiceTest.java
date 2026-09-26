@@ -8,6 +8,9 @@ import com.shopflow.catalog.repository.ReservationRepository;
 import com.shopflow.catalog.repository.StockItemRepository;
 import com.shopflow.catalog.web.dto.CreateReservationRequest;
 import com.shopflow.catalog.web.dto.ReservationResponse;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,8 +41,16 @@ class ReservationServiceTest {
     @Mock
     private Clock clock;
 
-    @InjectMocks
+
     private ReservationService reservationService;
+
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    @BeforeEach
+    void setUp() {
+        reservationService = new ReservationService(
+            reservationRepository, stockItemRepository, reservationMapper, clock, meterRegistry);
+    }
 
     private StockItem stockItem(int quantity, int reserved) {
         StockItem item = new StockItem();

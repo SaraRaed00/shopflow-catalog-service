@@ -113,6 +113,10 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         CountDownLatch startLatch = new CountDownLatch(1);
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger conflictCount = new AtomicInteger(0);
+        AtomicInteger exhaustedRetriesCount = new AtomicInteger(0);
+
+        // extra counter to catch the missing threads
+        AtomicInteger unknownCount = new AtomicInteger(0);
 
         for(int i=0; i<20 ;i++){
             pool.submit(()-> {
@@ -128,6 +132,17 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
                 catch (InterruptedException exception){
                     Thread.currentThread().interrupt();
                 }
+
+                /*
+                catch (org.springframework.dao.OptimisticLockingFailureException exception) {
+                    exhaustedRetriesCount.incrementAndGet();
+                }
+                 */
+
+                catch (Exception exception) {
+                    unknownCount.incrementAndGet();
+                    System.out.println("UNEXPECTED: " + exception.getClass().getName() + " - " + exception.getMessage());
+                }
             });
         }
         startLatch.countDown();
@@ -137,6 +152,7 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(successCount.get()).isEqualTo(5);
         assertThat(conflictCount.get()).isEqualTo(15);
+        //assertThat(conflictCount.get() + successCount.get() + exhaustedRetriesCount.get()).isEqualTo(20);
 
         StockItem finalStock = stockItemRepository.findById(savedStockItem.getId()).orElseThrow();
         assertThat(finalStock.getReservedQty()).isEqualTo(5);

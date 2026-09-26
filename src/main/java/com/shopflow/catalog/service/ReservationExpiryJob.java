@@ -13,6 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import org.slf4j.Logger;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -29,6 +30,7 @@ public class ReservationExpiryJob {
     private final Clock clock;
 
     @Scheduled(fixedDelay = 60000) // every 60sec run this method
+    @Transactional
     public void expireStaleReservation(){
         Instant now = Instant.now(clock);
         Pageable batch = PageRequest.of(0 , BATCH_SIZE);

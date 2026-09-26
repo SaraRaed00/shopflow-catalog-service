@@ -83,13 +83,14 @@ public class ApiExceptionHandler {
     // Every handler above calls this to actually construct the response.
     private ResponseEntity<ApiError> build(HttpStatus status, String code, String message,
                                            HttpServletRequest req, List<ApiError.FieldError> fieldErrors) {
+        String traceId = org.slf4j.MDC.get("traceId");
         ApiError error = new ApiError(
             Instant.now(),              // timestamp - exactly when this error happened
             status.value(),             // the numeric status code, e.g. 404 (status itself is an enum-like object; .value() gets the plain int)
             code,                       // our machine-readable code, e.g. "PRODUCT_NOT_FOUND" - what clients should branch on
             message,                    // human-readable explanation - can change wording anytime, never parsed by code
             req.getRequestURI(),        // which URL was being called, e.g. "/api/v1/products/42"
-            UUID.randomUUID().toString(), // a random unique ID for this specific error occurrence -
+            traceId,
             // useful for matching a client's bug report to your server logs
             fieldErrors                 // null for most errors; only populated for validation failures
         );
