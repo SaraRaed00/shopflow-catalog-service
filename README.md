@@ -332,6 +332,7 @@ Confirmed both up (`"status":"UP"`) and down (stopping the Redis container flips
 
 Our test suite is split into three layers, each testing a different amount of the real system. Unit tests are the fastest and most used, they check one class's logic in isolation,
 with every dependency faked, so no real database or network call ever happens. Unit tests load a small, real slice of Spring (just the web layer, or just the database layer) to check that a specific part actually wires together correctly.
+
 Integration tests load the entire real application, against real MySQL and Redis containers, to prove the whole system genuinely works end to end, these are the fewest in number, since they're the slowest to run.
 
 Clock and MeterRegistry are both passed into our services as constructor parameters rather than accessed as global/static values, which lets our tests supply a frozen, fake time instead of relying on real time passing.

@@ -62,6 +62,21 @@ class ReservationServiceTest {
     }
 
     @Test
+    void create_shouldNotMutateStockObject_whenSaveFails() {
+        when(clock.instant()).thenReturn(Instant.now());
+        StockItem item = stockItem(10, 0);
+        CreateReservationRequest request = new CreateReservationRequest(1L, 1L, 5);
+
+        when(stockItemRepository.findByProductIdAndWarehouseId(1L, 1L)).thenReturn(Optional.of(item));
+        when(reservationRepository.save(any(Reservation.class)))
+            .thenThrow(new RuntimeException("Simulated database failure"));
+
+        assertThatThrownBy(() -> reservationService.create(request))
+            .isInstanceOf(RuntimeException.class)
+            .hasMessageContaining("Simulated database failure");
+    }
+
+    @Test
     void expireAt_should_be_15min_after_createdAt() {
         Instant now = Instant.parse("2026-09-21T10:00:00Z");
         when(clock.instant()).thenReturn(now);

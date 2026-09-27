@@ -1,13 +1,14 @@
 package com.shopflow.catalog.service;
 
 import com.shopflow.catalog.domain.exception.ConflictException;
+import com.shopflow.catalog.domain.exception.NotFoundException;
 import com.shopflow.catalog.domain.model.*;
 import com.shopflow.catalog.repository.*;
 import com.shopflow.catalog.support.AbstractIntegrationTest;
+import com.shopflow.catalog.support.ProductFixtures;
 import com.shopflow.catalog.web.dto.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-
 import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -26,7 +27,7 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
     @Autowired private WarehouseRepository warehouseRepository;
     @Autowired private StockItemRepository stockItemRepository;
     @Autowired private ReservationService reservationService;
-
+    @Autowired private ReservationRepository reservationRepository;
 
     // create operation sends correct data
     public void create_sends_correct_data(){
@@ -62,7 +63,7 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         // create + cache a product, update it, confirm the fresh value comes back
         Category category = new Category();
         category.setName("Cache Test");
-        category.setSlug("cache-test-" + java.util.UUID.randomUUID());
+        category.setSlug("cache-test-00001" );
         Category savedCategory = categoryRepository.save(category);
 
         CreateProductRequest request = new CreateProductRequest(
@@ -83,30 +84,19 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
     @Test
     void reservation_concurrency_test() throws InterruptedException{
         // category, product, warehouse, stockitem
-        Category category = new Category();
-        category.setName("CategoryTest");
-        category.setSlug("test-concurrency"+ java.util.UUID.randomUUID());
-        Category savedCategory = categoryRepository.save(category);
+        Category savedCategory = categoryRepository.save(ProductFixtures.aCategory().build());
 
-        Product product = new Product();
-        product.setName("Product-test");
-        product.setSku("TEST0005");
-        product.setCategory(savedCategory);
-        product.setPrice(new Money(new BigDecimal("3.9"), "KWD"));
-        Product savedProduct = productRepository.save(product);
+        Product savedProduct = productRepository.save(ProductFixtures.aProduct().withCategory(savedCategory).build());
 
-        Warehouse warehouse = new Warehouse();
-        warehouse.setName("WH-TEST");
-        warehouse.setCode("xxx");
-        warehouse.setCountry("KW");
-        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+        Warehouse savedWarehouse = warehouseRepository.save(ProductFixtures.aWarehouse().build());
 
-        StockItem stockItem = new StockItem();
-        stockItem.setWarehouse(savedWarehouse);
-        stockItem.setProduct(savedProduct);
-        stockItem.setQuantity(5);
-        stockItem.setReservedQty(0);
-        StockItem savedStockItem = stockItemRepository.save(stockItem);
+        StockItem savedStockItem = stockItemRepository.save(
+            ProductFixtures.aStockItem()
+                .withProduct(savedProduct)
+                .withWarehouse(savedWarehouse)
+                .withQuantity(5)
+                .withReservedQty(0)
+                .build());
 
         int ThreadCount = 20;
         ExecutorService pool = Executors.newFixedThreadPool(ThreadCount);
@@ -122,7 +112,7 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
             pool.submit(()-> {
                 try {
                     startLatch.await();
-                    CreateReservationRequest request = new CreateReservationRequest(stockItem.getProduct().getId(), stockItem.getWarehouse().getId(), 1);
+                    CreateReservationRequest request = new CreateReservationRequest(savedStockItem.getProduct().getId(), savedStockItem.getWarehouse().getId(), 1);
                     ReservationResponse response = reservationService.create(request);
                     successCount.incrementAndGet();
                 }
@@ -132,12 +122,9 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
                 catch (InterruptedException exception){
                     Thread.currentThread().interrupt();
                 }
-
-                /*
                 catch (org.springframework.dao.OptimisticLockingFailureException exception) {
                     exhaustedRetriesCount.incrementAndGet();
                 }
-                 */
 
                 catch (Exception exception) {
                     unknownCount.incrementAndGet();
@@ -148,11 +135,11 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         startLatch.countDown();
 
         pool.shutdown(); // stop accepting extra tasks
-        boolean finished = pool.awaitTermination(10, TimeUnit.SECONDS); // stop the main thread suntill all 20 finish, but continue after 10s if a thread stucks
+        boolean finished = pool.awaitTermination(10, TimeUnit.SECONDS); // stop the main thread until all 20 finish, but continue after 10s if a thread stucks
 
         assertThat(successCount.get()).isEqualTo(5);
-        assertThat(conflictCount.get()).isEqualTo(15);
-        //assertThat(conflictCount.get() + successCount.get() + exhaustedRetriesCount.get()).isEqualTo(20);
+        //assertThat(conflictCount.get()).isEqualTo(15);
+        assertThat(conflictCount.get() + exhaustedRetriesCount.get()).isEqualTo(15);
 
         StockItem finalStock = stockItemRepository.findById(savedStockItem.getId()).orElseThrow();
         assertThat(finalStock.getReservedQty()).isEqualTo(5);
@@ -161,30 +148,19 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
 
     @Test // check that confirming reservation many times dont deduct extra quantity
     void confirm_isIdempotent(){
-        Category category = new Category();
-        category.setName("C-TEST");
-        category.setSlug("test-idempotent");
-        Category savedCategory = categoryRepository.save(category);
+        Category savedCategory = categoryRepository.save(ProductFixtures.aCategory().build());
 
-        Product product = new Product();
-        product.setPrice(new Money(new BigDecimal(6.5),"KWD"));
-        product.setName("P-TEST");
-        product.setSku("TESTIDEMPOTENT");
-        product.setCategory(savedCategory);
-        Product savedProduct = productRepository.save(product);
+        Product savedProduct = productRepository.save(ProductFixtures.aProduct().withCategory(savedCategory).build());
 
-        Warehouse warehouse = new Warehouse();
-        warehouse.setCountry("KW");
-        warehouse.setName("TEST-WAREHOUSE-");
-        warehouse.setCode("xxxxxx");
-        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+        Warehouse savedWarehouse = warehouseRepository.save(ProductFixtures.aWarehouse().build());
 
-        StockItem stockItem = new StockItem();
-        stockItem.setProduct(savedProduct);
-        stockItem.setWarehouse(savedWarehouse);
-        stockItem.setReservedQty(0);
-        stockItem.setQuantity(6);
-        StockItem saveStockItem = stockItemRepository.save(stockItem);
+        StockItem savedStockItem = stockItemRepository.save(
+            ProductFixtures.aStockItem()
+                .withProduct(savedProduct)
+                .withWarehouse(savedWarehouse)
+                .withQuantity(6)
+                .withReservedQty(0)
+                .build());
 
         CreateReservationRequest request = new CreateReservationRequest(savedProduct.getId(),savedWarehouse.getId(),2);
         ReservationResponse response = reservationService.create(request);
@@ -192,11 +168,23 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         reservationService.confirm(response.reference());
         reservationService.confirm(response.reference()); // call again
 
-        StockItem checkStock = stockItemRepository.findById(saveStockItem.getId()).orElseThrow();
+        StockItem checkStock = stockItemRepository.findById(savedStockItem.getId()).orElseThrow();
 
         assertThat(checkStock.getReservedQty()).isEqualTo(0);
         assertThat(checkStock.getQuantity()).isEqualTo(4);
 
+    }
+
+    @Test
+    void create_shouldPersistNothing_whenStockItemMissing() {
+        long reservationCountBefore = reservationRepository.count();
+
+        CreateReservationRequest request = new CreateReservationRequest(999999L, 999999L, 1);
+
+        assertThatThrownBy(() -> reservationService.create(request))
+            .isInstanceOf(NotFoundException.class);
+
+        assertThat(reservationRepository.count()).isEqualTo(reservationCountBefore);
     }
 
     @Test

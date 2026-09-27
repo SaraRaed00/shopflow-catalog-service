@@ -10,6 +10,32 @@ jobs:
     build:
         runs-on: ubuntu-latest
 
+        services:
+            mysql:
+                image: mysql:8
+                env:
+                    MYSQL_DATABASE: shopflow
+                    MYSQL_USER: shopflow
+                    MYSQL_PASSWORD: shopflow
+                    MYSQL_ROOT_PASSWORD: root
+                ports:
+                    - 3306:3306
+                options: >-
+                    --health-cmd="mysqladmin ping -h localhost"
+                    --health-interval=5s
+                    --health-timeout=5s
+                    --health-retries=10
+
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6380:6379
+                options: >-
+                    --health-cmd="redis-cli ping"
+                    --health-interval=5s
+                    --health-timeout=5s
+                    --health-retries=10
+
         steps:
             - name: Check out code
               uses: actions/checkout@v4

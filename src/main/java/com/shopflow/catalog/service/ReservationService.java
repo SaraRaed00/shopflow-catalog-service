@@ -12,7 +12,6 @@ import com.shopflow.catalog.web.dto.CreateReservationRequest;
 import com.shopflow.catalog.web.dto.ReservationResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import org.springframework.retry.annotation.Recover;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.OptimisticLockingFailureException;
