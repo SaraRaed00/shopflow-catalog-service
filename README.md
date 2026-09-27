@@ -19,7 +19,6 @@ A Spring Boot service that owns ShopFlow's product catalog, per-warehouse invent
 - [Caching](#caching)
 - [Observability](#observability)
 - [Testing strategy](#testing-strategy)
-- [Security](#security)
 - [Project structure](#project-structure)
 - [License](#license)
 
