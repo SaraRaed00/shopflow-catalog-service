@@ -21,6 +21,7 @@ A Spring Boot service that owns ShopFlow's product catalog, per-warehouse invent
 - [Testing strategy](#testing-strategy)
 - [Security](#security)
 - [Project structure](#project-structure)
+- [License](#license)
 
 ---
 
@@ -364,5 +365,8 @@ src/test/java/com/shopflow/catalog/
   support/      AbstractIntegrationTest (Testcontainers: MySQL + Redis)
     ProductIntegrationTest  incl. the 20-thread reservation concurrency test
 ```
+
+## License
+MIT
 
 
