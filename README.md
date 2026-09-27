@@ -59,17 +59,6 @@ A Spring Boot service that owns ShopFlow's product catalog, per-warehouse invent
 
 Layered, one-way dependencies: `web` → `service` → `domain` / `repository`. JPA entities never leave the service layer, controllers only ever see DTOs. `@Transactional` lives on service methods only.
 
-Category - Category: one category can have many child categories (self-referencing, via parent_id).
-
-Category - Product: one category can have many products; each product belongs to exactly one category.
-
-Product - StockItem: one product can have many stock records, one per warehouse it's stocked in.
-
-Warehouse - StockItem: one warehouse can hold many stock records, one per product stocked there.
-
-Product - Reservation: one product can have many reservations against it over time.
-
-Warehouse - Reservation: one warehouse can have many reservations drawn from its stock.
 
 ```mermaid
 flowchart TB
@@ -108,6 +97,18 @@ flowchart TB
 ```
 
 ## Data model
+We have many relations between entities, summarized in this graph:
+Category - Category: one category can have many child categories (self-referencing, via parent_id).
+
+Category - Product: one category can have many products; each product belongs to exactly one category.
+
+Product - StockItem: one product can have many stock records, one per warehouse it's stocked in.
+
+Warehouse - StockItem: one warehouse can hold many stock records, one per product stocked there.
+
+Product - Reservation: one product can have many reservations.
+
+Warehouse - Reservation: one warehouse can have many reservations from its stock.
 
 ```mermaid
 erDiagram
@@ -169,7 +170,7 @@ Key constraints (enforced at the database level, not just in application code): 
 
 ## Request flow
 
-This is the reservation path, since it's the one with real invariants to protect (illustrates the optimistic-locking retry loop described in [Concurrency](#concurrency-the-reservation-race)):
+This is the reservation path:
 
 ```mermaid
 sequenceDiagram
