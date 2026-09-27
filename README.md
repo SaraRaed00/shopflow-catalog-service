@@ -57,7 +57,7 @@ A Spring Boot service that owns ShopFlow's product catalog, per-warehouse invent
 
 ## Architecture
 
-Layered, one-way dependencies: `web` → `service` → `domain` / `repository`. JPA entities never leave the service layer — controllers only ever see DTOs. `@Transactional` lives on service methods only.
+Layered, one-way dependencies: `web` → `service` → `domain` / `repository`. JPA entities never leave the service layer, controllers only ever see DTOs. `@Transactional` lives on service methods only.
 
 Category - Category: one category can have many child categories (self-referencing, via parent_id).
 
@@ -225,7 +225,7 @@ docker compose up -d mysql redis
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The `local` profile switches logging to plain, human-readable console output (`timestamp [thread] LEVEL [traceId] logger - message`) instead of the JSON format used everywhere else — see [Observability](#observability).
+The `local` profile switches logging to plain, human-readable console output (`timestamp [thread] LEVEL [traceId] logger - message`) instead of the JSON format used everywhere else
 
 ### Run the tests
 
@@ -254,7 +254,7 @@ open target/site/jacoco/index.html
 
 ## API
 
-Base path `/api/v1`. Full contract with example payloads, request/response schemas, and every documented error response: Swagger UI (`/swagger-ui.html`) — every endpoint is annotated with `@Operation` and `@ApiResponses`, including its failure modes, not just the happy path.
+Base path `/api/v1`. Full contract with example payloads, request/response schemas, and every documented error response: Swagger UI (`/swagger-ui.html`), every endpoint is annotated with `@Operation` and `@ApiResponses`, including its failure modes, not just the happy path.
 
 
 - `POST /products/create` is for creating a new product, and the created product's id is returned in the response body.
