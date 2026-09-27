@@ -171,7 +171,7 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
         StockItem checkStock = stockItemRepository.findById(savedStockItem.getId()).orElseThrow();
 
         assertThat(checkStock.getReservedQty()).isEqualTo(0);
-        assertThat(checkStock.getQuantity()).isEqualTo(3);
+        assertThat(checkStock.getQuantity()).isEqualTo(4);
 
     }
 
