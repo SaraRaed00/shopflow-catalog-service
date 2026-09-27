@@ -1,4 +1,5 @@
 # ShopFlow Catalog & Inventory Service
+[![CI](https://github.com/SaraRaed00/shopflow-catalog-service/actions/workflows/ci.yml/badge.svg)](https://github.com/SaraRaed00/shopflow-catalog-service/actions/workflows/ci.yml)
 
 A Spring Boot service that owns ShopFlow's product catalog, per-warehouse inventory, and short-lived stock reservations.
 
@@ -19,7 +20,6 @@ A Spring Boot service that owns ShopFlow's product catalog, per-warehouse invent
 - [Caching](#caching)
 - [Observability](#observability)
 - [Testing strategy](#testing-strategy)
-- [Security](#security)
 - [Project structure](#project-structure)
 - [License](#license)
 
@@ -213,13 +213,12 @@ git clone https://github.com/<user>/shopflow-catalog-service.git
 cd shopflow-catalog-service
 cp .env.example .env
 docker compose up -d
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 curl http://localhost:8080/actuator/health
 ```
 
 Swagger UI: http://localhost:8080/swagger-ui.html
 
-### Run the app locally against containerised dependencies
+### Run the app locally against containerised dependencies (for development)
 
 ```bash
 docker compose up -d mysql redis
