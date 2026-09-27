@@ -144,18 +144,37 @@ class CategoryServiceTest {
 
     @Test
     void update_shouldSetNewParent_whenParentIdProvided() {
-        Category category = new Category(); // 1L
-        Category newParent = new Category(); //5L
+        Category category = new Category();
+        category.setId(1L);
+
+        Category newParent = new Category();
+        newParent.setId(5L);
+
         CreateCategoryRequest request = new CreateCategoryRequest("slug", "Name", 5L);
-        CategoryResponse response = new CategoryResponse(1L, "Name", "slug", 5L, Collections.emptyList(), null, null);
 
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(categoryRepository.findById(5L)).thenReturn(Optional.of(newParent));
         when(categoryRepository.findByParentId(any())).thenReturn(Collections.emptyList());
-        when(categoryMapper.toResponse(category)).thenReturn(response);
+        when(categoryMapper.toResponse(category)).thenReturn(
+            new CategoryResponse(1L, "Name", "slug", 5L, Collections.emptyList(), null, null));
 
         categoryService.update(1L, request);
 
         assertThat(category.getParent()).isEqualTo(newParent);
     }
+
+    @Test
+    void update_shouldThrowConflict_whenParentIsSelf() {
+        Category category = new Category();
+        category.setId(1L);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+
+        CreateCategoryRequest request = new CreateCategoryRequest("Name", "slug", 1L);
+
+        assertThatThrownBy(() -> categoryService.update(1L, request))
+            .isInstanceOf(ConflictException.class)
+            .hasMessageContaining("cannot be its own parent");
+    }
+
 }

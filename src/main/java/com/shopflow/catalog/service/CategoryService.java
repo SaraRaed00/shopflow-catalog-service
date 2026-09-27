@@ -83,8 +83,19 @@ public class CategoryService {
         category.setSlug(request.slug());
 
         if (request.parentId() != null) {
+            if (request.parentId().equals(id)) {
+                throw new ConflictException("INVALID_PARENT", "A category cannot be its own parent");
+            }
             Category parent = categoryRepository.findById(request.parentId())
                 .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "No category with id " + request.parentId()));
+
+            Category ancestor = parent;
+            while (ancestor != null) {
+                if (ancestor.getId().equals(id)) {
+                    throw new ConflictException("INVALID_PARENT", "This change would create a category cycle");
+                }
+                ancestor = ancestor.getParent();
+            }
             category.setParent(parent);
         } else {
             category.setParent(null);
