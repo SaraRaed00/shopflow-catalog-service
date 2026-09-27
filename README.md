@@ -365,4 +365,7 @@ src/test/java/com/shopflow/catalog/
     ProductIntegrationTest  incl. the 20-thread reservation concurrency test
 ```
 
+## License
+MIT
+
 
