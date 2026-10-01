@@ -13,8 +13,7 @@ RUN --mount=type=secret,id=corporate-ca \
             -cacerts -storepass changeit; \
     fi
 
-# Copy only what's needed to resolve dependencies first, so this layer
-# is cached and skipped on rebuilds where only source code changed.
+# Copy only what's needed to resolve dependencies first, so this layer is cached and skipped on rebuilds where only source code changed.
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN ./mvnw dependency:go-offline -B

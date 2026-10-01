@@ -4,6 +4,7 @@ import com.shopflow.catalog.domain.exception.ConflictException;
 import com.shopflow.catalog.domain.exception.NotFoundException;
 import com.shopflow.catalog.domain.model.*;
 import com.shopflow.catalog.mapper.ReservationMapper;
+import com.shopflow.catalog.repository.OutboxEventRepository;
 import com.shopflow.catalog.repository.ReservationRepository;
 import com.shopflow.catalog.repository.StockItemRepository;
 import com.shopflow.catalog.web.dto.CreateReservationRequest;
@@ -17,7 +18,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
+import
+    com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -40,16 +42,24 @@ class ReservationServiceTest {
     private ReservationMapper reservationMapper;
     @Mock
     private Clock clock;
-
+    @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private ObjectMapper objectMapper;
 
     private ReservationService reservationService;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
+
+
     @BeforeEach
     void setUp() {
-        reservationService = new ReservationService(
-            reservationRepository, stockItemRepository, reservationMapper, clock, meterRegistry);
+        reservationService = new ReservationService(reservationRepository,
+            stockItemRepository,
+            reservationMapper,
+            clock,
+            meterRegistry,
+            outboxEventRepository ,
+            objectMapper);
     }
 
     private StockItem stockItem(int quantity, int reserved) {

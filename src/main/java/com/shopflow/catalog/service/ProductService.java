@@ -14,6 +14,8 @@ import com.shopflow.catalog.web.dto.*;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,9 @@ public class ProductService {
 
         return productMapper.toResponse(productRepository.save(product));
     }
+
+
+
     @Cacheable(value = "products", key = "#id")
     @Transactional(readOnly = true)
     public ProductResponse findById(Long id) {
@@ -106,6 +111,8 @@ public class ProductService {
     }
 
 
+
+
     private Product findEntityById(Long id) {
         return productRepository.findById(id)
             .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "No product with id " + id));
@@ -116,5 +123,22 @@ public class ProductService {
             .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "NO PRODUCT WITH THIS SKU: "+ sku) );
     }
 
+    @Transactional(readOnly = true)
+    public keysetPageResponse<ProductResponse> feed(ProductSearchCriteria criteria, Long afterId, int size){
+        Specification<Product> spec = ProductSpecification.matching(criteria);
+        if (afterId != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThan(root.get("id"), afterId));
+        }
+        List<Product> rows = productRepository.findBy(spec,
+            q -> q.sortBy(Sort.by("id").ascending()).limit(size + 1).all());
+
+        boolean hasNext = rows.size() > size;
+        List<Product> pageRows = hasNext ? rows.subList(0, size) : rows;
+
+        List<ProductResponse> content = pageRows.stream().map(productMapper::toResponse).toList();
+        Long nextCursor = hasNext ? pageRows.get(pageRows.size() - 1).getId() : null;
+
+        return new keysetPageResponse<>(content, nextCursor, hasNext);
+    }
 
 }

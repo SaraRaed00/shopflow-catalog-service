@@ -17,7 +17,6 @@ public class Warehouse {
 
     @Column(nullable = false, length = 2) private String country;
 
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

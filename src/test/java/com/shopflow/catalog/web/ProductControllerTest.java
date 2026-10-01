@@ -1,14 +1,20 @@
 package com.shopflow.catalog.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shopflow.catalog.config.ReservationRateLimitFilter;
 import com.shopflow.catalog.domain.exception.ConflictException;
 import com.shopflow.catalog.service.InventoryService;
+import com.shopflow.catalog.service.ProductImportService;
 import com.shopflow.catalog.service.ProductService;
 import com.shopflow.catalog.web.dto.CreateProductRequest;
 import com.shopflow.catalog.web.dto.PageResponse;
 import com.shopflow.catalog.web.dto.ProductResponse;
+import org.apache.catalina.filters.RateLimitFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
@@ -22,8 +28,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // @WebMvcTest starts ONLY the web layer for this one controller - routing,
 // validation, JSON serialization, and your ApiExceptionHandler. No database,
 // no real ProductService - much faster than a full @SpringBootTest.
-@WebMvcTest(ProductController.class)
-class ProductControllerTest {
+@WebMvcTest(
+    controllers = ProductController.class,
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {ReservationRateLimitFilter.class}
+    )
+)class ProductControllerTest {
 
     @Autowired
     private MockMvc mockMvc; // lets us "send" fake HTTP requests without a real server
@@ -37,6 +48,8 @@ class ProductControllerTest {
 
     @MockitoBean
     private InventoryService inventoryService; // controller needs this too, even unused here
+    @MockitoBean
+    private ProductImportService productImportService;
 
     @Test
     void create_shouldReturn201_whenValid() throws Exception {

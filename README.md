@@ -328,6 +328,32 @@ Confirmed both up (`"status":"UP"`) and down (stopping the Redis container flips
 
 **Build metadata.** `/actuator/info` exposes the real artifact name, version, group, and build timestamp, generated automatically by the `spring-boot-maven-plugin`'s `build-info`.
 
+
+## Stretching goals
+
+**Keyset pagination.**
+
+POST /api/v1/products/feed
+pages by cursor instead of page number. The client sends the last product id it saw (called: afterId) to view the next records,
+and the query becomes WHERE id > afterId ORDER BY id LIMIT (size + 1).
+Because id is the primary key, MySQL locates the starting point through the index.
+
+The extra row tells us whether another page exists, so no COUNT query is needed, that’s why (size +1)
+
+POST /api/v1/products/search keeps offset paging (page/size).
+
+**Load testing with JMeter**
+
+The reservation endpoint already has passive timing in place via Micrometer (reservations.create.duration,
+tagged by outcome, visible in /actuator/metrics and /actuator/prometheus), which measures server-side processing time for
+whatever traffic actually arrives.
+
+The load test is a different thing: a tool like k6 or JMeter would send a fixed number of concurrent
+virtual users against a cached read path (GET /products/{id}) for a fixed duration and report the latency.
+
+Comparing that p95 with caching enabled against caching disabled (achieved by stopping Redis, which the app already degrades gracefully
+from via CacheErrorHandler) would give a real, measured answer to how much does the cache actually help, rather than an assumption.
+
 ## Testing strategy
 
 Our test suite is split into three layers, each testing a different amount of the real system. Unit tests are the fastest and most used, they check one class's logic in isolation,

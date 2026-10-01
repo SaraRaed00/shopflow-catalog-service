@@ -1,13 +1,17 @@
 package com.shopflow.catalog.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shopflow.catalog.config.ReservationRateLimitFilter;
 import com.shopflow.catalog.domain.exception.ConflictException;
 import com.shopflow.catalog.service.ReservationService;
 import com.shopflow.catalog.web.dto.CreateReservationRequest;
 import com.shopflow.catalog.web.dto.ReservationResponse;
+import org.apache.catalina.filters.RateLimitFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -17,8 +21,13 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(ReservationController.class)
-class ReservationControllerTest {
+@WebMvcTest(
+    controllers = ReservationController.class,
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {ReservationRateLimitFilter.class}
+    )
+)class ReservationControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

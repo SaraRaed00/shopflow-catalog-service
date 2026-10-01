@@ -3,6 +3,7 @@ package com.shopflow.catalog.web;
 import com.shopflow.catalog.domain.exception.InvalidRequestException;
 import com.shopflow.catalog.domain.model.ProductStatus;
 import com.shopflow.catalog.service.InventoryService;
+import com.shopflow.catalog.service.ProductImportService;
 import com.shopflow.catalog.service.ProductService;
 import com.shopflow.catalog.web.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,15 +17,18 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Products", description = "Product catalog CRUD, search and stock lookups")
 @RestController
@@ -32,10 +36,12 @@ import org.springframework.data.domain.Pageable;
 public class ProductController {
     private final ProductService productService;
     private final InventoryService inventoryService;
+    private final ProductImportService productImportService;
 
-    public ProductController(ProductService productService, InventoryService inventoryService) {
+    public ProductController(ProductService productService, InventoryService inventoryService, ProductImportService productImportService) {
         this.productService = productService;
         this.inventoryService = inventoryService;
+        this.productImportService = productImportService;
     }
 
     @Operation(summary = "Create a new product", description = "Create a product in status: DRAFT with Category available.")
@@ -50,6 +56,8 @@ public class ProductController {
         ProductResponse response = productService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+
 
 
     @Operation(summary = "Search products", description = "Filter/sort/page products. Empty body returns all products.")
@@ -178,7 +186,26 @@ public class ProductController {
     })
     @GetMapping("/{id}/stock")
     public List<StockResponse> getStock(@PathVariable Long id) {
-
         return inventoryService.getStockForProduct(id);
+    }
+
+    @PostMapping("/feed")
+    public keysetPageResponse<ProductResponse> feed(
+        @RequestBody(required = false) ProductSearchCriteria criteria,
+        @RequestParam(required = false) Long afterId,
+        @RequestParam(defaultValue = "20") int size) {
+
+        ProductSearchCriteria finalCriteria = (criteria != null) ? criteria : new ProductSearchCriteria(null, null, null, null, null);
+        int safeSize = Math.max(1, Math.min(size, 100));
+
+        return productService.feed(finalCriteria, afterId, safeSize);
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ImportReport importProducts(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new InvalidRequestException("EMPTY_FILE", "Upload a non-empty CSV file");
+        }
+        return productImportService.importCsv(file.getInputStream());
     }
 }

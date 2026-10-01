@@ -1,14 +1,19 @@
 package com.shopflow.catalog.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopflow.catalog.domain.exception.ConflictException;
 import com.shopflow.catalog.domain.exception.NotFoundException;
+import com.shopflow.catalog.domain.model.OutboxEvent;
 import com.shopflow.catalog.domain.model.Reservation;
 import com.shopflow.catalog.domain.model.ReservationStatus;
 import com.shopflow.catalog.domain.model.StockItem;
 import com.shopflow.catalog.mapper.ReservationMapper;
+import com.shopflow.catalog.repository.OutboxEventRepository;
 import com.shopflow.catalog.repository.ReservationRepository;
 import com.shopflow.catalog.repository.StockItemRepository;
 import com.shopflow.catalog.web.dto.CreateReservationRequest;
+import com.shopflow.catalog.web.dto.ReservationConfirmedPayload;
 import com.shopflow.catalog.web.dto.ReservationResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -32,15 +37,19 @@ public class ReservationService {
     private final ReservationMapper reservationMapper;
     private static final Duration HOLD_DURATION = Duration.ofMinutes(15);
     private final Clock clock;
+    private final OutboxEventRepository outboxEventRepository;
     // we will use it to record the metric
     private final MeterRegistry meterRegistry;
+    private final ObjectMapper objectMapper;
 
-    public ReservationService(ReservationRepository reservationRepository, StockItemRepository stockItemRepository, ReservationMapper reservationMapper, Clock clock, MeterRegistry meterRegistry){
+    public ReservationService(ReservationRepository reservationRepository, StockItemRepository stockItemRepository, ReservationMapper reservationMapper, Clock clock, MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository, ObjectMapper objectMapper){
         this.reservationRepository = reservationRepository;
         this.stockItemRepository = stockItemRepository;
         this.reservationMapper = reservationMapper;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
+        this.outboxEventRepository = outboxEventRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Retryable(
@@ -100,18 +109,52 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse confirm(String reference) {
-        Reservation reservation = findEntityByReference(reference);
+
+        Reservation reservation = reservationRepository.findByReference(reference)
+            .orElseThrow(() -> new NotFoundException("RESERVATION_NOT_FOUND", "No reservation with reference " + reference));
+
+
         if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
             return reservationMapper.toResponse(reservation);
         }
+
         reservation.changeStatus(ReservationStatus.CONFIRMED);
+
         StockItem stock = stockItemRepository.findByProductIdAndWarehouseId(
                 reservation.getProduct().getId(), reservation.getWarehouse().getId())
             .orElseThrow(() -> new NotFoundException("STOCK_NOT_FOUND", "Stock record missing"));
+
+
         stock.setQuantity(stock.getQuantity() - reservation.getQuantity());
         stock.setReservedQty(stock.getReservedQty() - reservation.getQuantity());
+
+        publishReservationConfirmed(reservation);
+
         return reservationMapper.toResponse(reservation);
     }
+
+
+    private void publishReservationConfirmed(Reservation reservation) {
+        try {
+            String payload = objectMapper.writeValueAsString(new ReservationConfirmedPayload(
+                reservation.getReference(),
+                reservation.getProduct().getId(),
+                reservation.getWarehouse().getId(),
+                reservation.getQuantity(),
+                Instant.now(clock)));
+
+            OutboxEvent event = new OutboxEvent();
+            event.setAggregateType("Reservation");
+            event.setAggregateId(reservation.getReference());
+            event.setEventType("ReservationConfirmed");
+            event.setPayload(payload);
+            event.setCreatedAt(Instant.now(clock));
+            outboxEventRepository.save(event);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize outbox event", ex);
+        }
+    }
+
 
     @Transactional
     public ReservationResponse release(String reference) {

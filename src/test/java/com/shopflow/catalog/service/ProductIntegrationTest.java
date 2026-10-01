@@ -9,25 +9,38 @@ import com.shopflow.catalog.support.ProductFixtures;
 import com.shopflow.catalog.web.dto.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ResponseEntity;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
+import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-public class ProductIntegrationTest extends AbstractIntegrationTest {
-    @Autowired
-    private ProductService productService;
+@AutoConfigureTestRestTemplate
+public class ProductIntegrationTest extends AbstractIntegrationTest{
+    @Autowired private ProductService productService;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private WarehouseRepository warehouseRepository;
     @Autowired private StockItemRepository stockItemRepository;
     @Autowired private ReservationService reservationService;
     @Autowired private ReservationRepository reservationRepository;
+    @Autowired private ProductImportService productImportService;
+    @Autowired private TestRestTemplate restTemplate;
+    @Autowired private OutboxEventRepository outboxEventRepository;
+    @Autowired private OutboxPublisherJob outboxPublisherJob;
 
     // create operation sends correct data
     public void create_sends_correct_data(){
@@ -217,8 +230,135 @@ public class ProductIntegrationTest extends AbstractIntegrationTest {
             assertThat(finalStock.getQuantity()).isEqualTo(10);
             assertThat(finalStock.getReservedQty()).isEqualTo(0);
         }
+
+    @Test
+    void feed_shouldPutAllProductsInOrder_usingCursor() {
+        Category category = categoryRepository.save(ProductFixtures.aCategory().build());
+        for (int i = 0; i < 5; i++) {
+            productRepository.save(ProductFixtures.aProduct().withCategory(category).build());
+        }
+        ProductSearchCriteria criteria = new ProductSearchCriteria(null, category.getId(), null, null, null);
+
+        keysetPageResponse<ProductResponse> page1 = productService.feed(criteria, null, 2);
+        assertThat(page1.content()).hasSize(2);
+        assertThat(page1.hasNext()).isTrue();
+
+        keysetPageResponse<ProductResponse> page2 = productService.feed(criteria, page1.nextCursor(), 2);
+        assertThat(page2.content()).hasSize(2);
+        assertThat(page2.hasNext()).isTrue();
+
+        keysetPageResponse<ProductResponse> page3 = productService.feed(criteria, page2.nextCursor(), 2);
+        assertThat(page3.content()).hasSize(1);
+        assertThat(page3.hasNext()).isFalse();
+        assertThat(page3.nextCursor()).isNull();
+
+        List<Long> allIds = Stream.of(page1, page2, page3)
+            .flatMap(p -> p.content().stream())
+            .map(ProductResponse::id)
+            .toList();
+        assertThat(allIds).doesNotHaveDuplicates().isSorted();
     }
 
+    @Test
+    void importCsvFile_shouldImportGoodRows_andReportEachBadRow() throws IOException {
+        // make the test repeatable: remove rows a previous run may have created
+        productRepository.findBySku("CSV-IMP-1").ifPresent(productRepository::delete);
+        productRepository.findBySku("CSV-IMP-6").ifPresent(productRepository::delete);
 
+        ImportReport report;
+        try (InputStream in = new ClassPathResource("import/products-mixed.csv").getInputStream()) {
+            report = productImportService.importCsv(in);
+        }
 
+        for (ImportRowError error : report.errors()) {
+            System.out.println("row " + error.row() + " [" + error.code() + "]: " + error.message());
+        }
 
+        assertThat(report.totalRows()).isEqualTo(7);
+        assertThat(report.imported()).isEqualTo(2);
+        assertThat(report.failedInvalidRowException()).isEqualTo(3);
+        assertThat(report.failedNotFoundException()).isEqualTo(1);
+        assertThat(report.failedDataIntegrity()).isEqualTo(0);
+        assertThat(report.failedConflictException()).isEqualTo(1);
+
+        assertThat(report.errors()).extracting(ImportRowError::row)
+            .containsExactly(2L, 3L, 4L, 5L, 6L);
+        assertThat(productRepository.existsBySku("CSV-IMP-1")).isTrue();
+        assertThat(productRepository.existsBySku("CSV-IMP-6")).isTrue();
+        assertThat(productRepository.existsBySku("CSV-IMP-2")).isFalse();
+    }
+
+    @Test
+    void reservationCreate_shouldReturn429_afterTenRequestsInOneMinute() {
+        Category category = categoryRepository.save(ProductFixtures.aCategory().build());
+        Product product = productRepository.save(ProductFixtures.aProduct().withCategory(category).build());
+        Warehouse warehouse = warehouseRepository.save(ProductFixtures.aWarehouse().build());
+        stockItemRepository.save(ProductFixtures.aStockItem()
+            .withProduct(product).withWarehouse(warehouse).withQuantity(100).build());
+
+        CreateReservationRequest request = new CreateReservationRequest(product.getId(), warehouse.getId(), 1);
+
+        for (int i = 0; i < 10; i++) {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                "/api/v1/reservations", request, String.class);
+            assertThat(response.getStatusCode().value()).isNotEqualTo(429);
+        }
+
+        ResponseEntity<String> extra = restTemplate.postForEntity(
+            "/api/v1/reservations", request, String.class);
+
+        assertThat(extra.getStatusCode().value()).isEqualTo(429);
+    }
+
+    @Test
+    void confirm_shouldWriteOutboxEvent_inSameTransaction() {
+        Category category = categoryRepository.save(ProductFixtures.aCategory().build());
+        Product product = productRepository.save(ProductFixtures.aProduct().withCategory(category).build());
+        Warehouse warehouse = warehouseRepository.save(ProductFixtures.aWarehouse().build());
+        stockItemRepository.save(ProductFixtures.aStockItem()
+            .withProduct(product).withWarehouse(warehouse).withQuantity(10).build());
+
+        ReservationResponse reservation = reservationService.create(
+            new CreateReservationRequest(product.getId(), warehouse.getId(), 2));
+
+        long before = outboxEventRepository.count();
+        reservationService.confirm(reservation.reference());
+        long after = outboxEventRepository.count();
+
+        assertThat(after).isEqualTo(before + 1);
+
+        OutboxEvent event = outboxEventRepository.findByStatusOrderByCreatedAtAsc(
+            "PENDING", PageRequest.of(0, 1)).get(0); // status should convert to published
+        assertThat(event.getEventType()).isEqualTo("ReservationConfirmed");
+        assertThat(event.getAggregateId()).isEqualTo(reservation.reference());
+        assertThat(event.getPayload()).contains(reservation.reference());
+    }
+
+    @Test
+    void failedConfirm_shouldWriteNoOutboxEvent() {
+        long before = outboxEventRepository.count();
+
+        assertThatThrownBy(() -> reservationService.confirm("does-not-exist"))
+            .isInstanceOf(NotFoundException.class);
+
+        assertThat(outboxEventRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    void outboxPublisherJob_shouldMarkPendingEventsAsPublished() {
+        OutboxEvent event = new OutboxEvent();
+        event.setAggregateType("Reservation");
+        event.setAggregateId("ref-test");
+        event.setEventType("ReservationConfirmed");
+        event.setPayload("{}");
+        event.setCreatedAt(Instant.now());
+        outboxEventRepository.save(event);
+
+        outboxPublisherJob.publishPendingEvents();
+
+        OutboxEvent updated = outboxEventRepository.findById(event.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo("PUBLISHED");
+        assertThat(updated.getProcessedAt()).isNotNull();
+    }
+
+    }

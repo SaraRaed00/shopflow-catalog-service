@@ -1,0 +1,8 @@
+sku,name,description,categoryId,priceAmount,priceCurrency
+CSV-IMP-1,Good One,"quoted, with a comma",1,5.000,KWD
+CSV-IMP-1,Bad Price,desc,1,abc,KWD
+CSV-IMP-1,Duplicate Of First,desc,1,6.000,KWD
+CSV-IMP-3,Missing Category,desc,999999,7.000,KWD
+lowercase-sku,Bad Sku Format,desc,1,8.000,KWD
+CSV-IMP-5,Short Row,desc
+CSV-IMP-6,Good Two,desc,1,9.000,KWD
